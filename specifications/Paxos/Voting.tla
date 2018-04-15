@@ -3,11 +3,11 @@
 (* This is a high-level algorithm in which a set of processes              *)
 (* cooperatively choose a value.                                           *)
 (***************************************************************************)
-EXTENDS Integers  \*注意，paxos里面的PN，这里叫做Ballot
+EXTENDS Integers  (* 注意，paxos 里面的 PN，这里叫做 Ballot*)
 -----------------------------------------------------------------------------
-                \*已经被choose的。实际上这个Set只允许最多一个元素
-CONSTANT Value,     \* The set of choosable values. 这是个Set，
-                    \*必须有多个Acceptor
+                    \*Value跟Chosen是两码事
+CONSTANT Value,     \* The set of choosable values.
+
          Acceptor,  \* A set of processes that will choose a value.  
          Quorum     \* The set of "quorums", where a quorum" is a 
                     \*   "large enough" set of acceptors
@@ -25,7 +25,7 @@ THEOREM QuorumNonEmpty == \A Q \in Quorum : Q # {}
 (* set of natural numbers.  However, we write Ballot for that set to       *)
 (* distinguish ballots from natural numbers used for other purposes.       *)
 (***************************************************************************)
-Ballot == Nat   \*Ballot即pn，可以不是自然数，这里简化为自然数
+Ballot == Nat   \*Ballot即pn，可以不是自然数，能比较大小接口。这里简化为自然数
 -----------------------------------------------------------------------------
 (***************************************************************************)
 (* In the algorithm, each acceptor can cast one or more votes, where each  *)
@@ -54,24 +54,24 @@ TypeOK == /\ votes \in [Acceptor -> SUBSET (Ballot \X Value)]
 (* We now make a series of definitions an assert some simple theorems      *)
 (* about those definitions that lead to the algorithm.                     *)
 (***************************************************************************)
-\*表示 a为 Ballot b, value v 投过票 ;  <<b, v>>，元组, ordered tuples，
+\*a voted for <b,v>  <b, v>，元组, ordered tuples，
 VotedFor(a, b, v) == <<b, v>> \in votes[a]
   (*************************************************************************)
   (* True iff acceptor a has voted for v in ballot b.                      *)
   (*************************************************************************)
 
-  \* 存在一个Quorum Q，其中每个成员都为(b,v)投票了，也就是形成了决议  
+  \*v has been ChosenAt b 存在一个Quorum Q，其中每个成员都为(b,v)投票了，也就是形成了决议  
 ChosenAt(b, v) == \E Q \in Quorum : 
                      \A a \in Q : VotedFor(a, b, v)
   (*************************************************************************)
   (* True iff a quorum of acceptors have all voted for v in ballot b.      *)
   (*************************************************************************)
-  \* chosen是决议选中的值。那么肯定有个v，在Ballot为b时被chosen了
+  \* chosen是决议选中的值。那么肯定有个v，在Ballot为b时被chosen了。这个是动态产生的集合，不是保存在变量里面
 chosen == {v \in Value : \E b \in Ballot : ChosenAt(b, v)}
   (*************************************************************************)
   (* The set of values that have been chosen.                              *)
   (*************************************************************************)
-  \* 没有为Ballot b投票，那么就是对任意v，都没有投过
+  \* a DidNotVoteAt b, a 没有为Ballot b投票，那么就是对任意v，都没有投过
 DidNotVoteAt(a, b) == \A v \in Value : ~ VotedFor(a, b, v) 
 \* 为什么不是>=? 应该是认为不会有相同的Ballot的，paxos要求distinct set，各个server不会用相同的PN
 \* 这里没有考虑v, 只是说b。
@@ -83,7 +83,7 @@ CannotVoteAt(a, b) == /\ maxBal[a] > b
   (* < maxBal[a], this implies that a has not and will never cast a vote   *)
   (* in ballot b.                                                          *)
   (*************************************************************************)
-  \* 对于除v以外的任意值w，不可能被用Ballot b choose了。因为Quorum里面，已经投了(b,v)或者不能为b投了
+  \* 不可能用b来 chose v以外的值。 对于除v以外的任意值w，不可能被用Ballot b choose了。因为Quorum里面，已经投了(b,v)或者不能为b投了
   \*说的是存在一个quorum，满足，并非任意一个都满足。
 NoneOtherChoosableAt(b, v) == 
    \E Q \in Quorum :
@@ -92,8 +92,8 @@ NoneOtherChoosableAt(b, v) ==
   (* If this is true, then ChosenAt(b, w) is not and can never become true *)
   (* for any w # v.                                                        *)
   (*************************************************************************)
-  \* v不可能再以任何小于b的ballot chosen。但是用更大的ballot是可以的，Phase 2的正常情况
-  \* 实际上表示 <b, v>形成了定论。后面只能增加Ballot，不能改变v了
+  \* 不可能用 <=b的ballot chose v以外的值。但是用更大的ballot是可以的，Phase 2的正常情况
+  \* 实际上表示 <b, v>形成了定论。后面只能增加Ballot，不能改变v了。  实际上这个对应 P2b?
 SafeAt(b, v) == \A c \in 0..(b-1) : NoneOtherChoosableAt(c, v)
   (*************************************************************************)
   (* If this is true, then no value other than v has been or can ever be   *)
@@ -111,18 +111,20 @@ THEOREM ChoosableThm ==
 \* 这个隐含了啥？ 跟前面的  CannotVoteAt 关联理解。注意，这里没有说chosen，只是说VotedFor(a, b, v)，就能保证SafeAt(b, v)了。
 VotesSafe == \A a \in Acceptor, b \in Ballot, v \in Value :
                  VotedFor(a, b, v) => SafeAt(b, v)
-\* 从投票角度，如果同一个a，为同一个b投了两次，那么一定是相同的value
+\* 从投票角度，如果同一个Server a，为同一个b投了两次，那么一定是相同的value
 \*ToDo: a1和a1，如果同一个b，是否也是同一value?
 OneVote == \A a \in Acceptor, b \in Ballot, v, w \in Value : 
               VotedFor(a, b, v) /\ VotedFor(a, b, w) => (v = w)
+
+\*这个也是从检查vote 开始的，没有任何关于proposal的内容。就是关注如何保证从vote以后的事情
 OneValuePerBallot ==  
     \A a1, a2 \in Acceptor, b \in Ballot, v1, v2 \in Value : 
        VotedFor(a1, b, v1) /\ VotedFor(a2, b, v2) => (v1 = v2)
 -----------------------------------------------------------------------------
-\*这个东西，到底在执行时是否会被验证？
+
 THEOREM OneValuePerBallot => OneVote
 -----------------------------------------------------------------------------
-\* 这个实际上保证的，就是Consensus的最简单的模型：要么没有形成决议，要么只有一个决议
+\* 这个实际上保证的，就是Consensus的最简单的模型：要么没有形成决议，要么只有一个决议。不过这里又称为Consistency了
 THEOREM VotesSafeImpliesConsistency ==
           /\ TypeOK 
           /\ VotesSafe
@@ -186,6 +188,7 @@ VoteFor(a, b, v) ==
 (* The next-state action and the invariant.                                *)
 (***************************************************************************)
 \* Next要不就是修改某个server的Ballot，要不就Vote，即只能执行phase 或者 phase 2?
+\* Voting这个里面，没有关于Propose的步骤，只从Vote这一步开始。
 Next  ==  \E a \in Acceptor, b \in Ballot : 
             \/ IncreaseMaxBal(a, b)
             \/ \E v \in Value : VoteFor(a, b, v)

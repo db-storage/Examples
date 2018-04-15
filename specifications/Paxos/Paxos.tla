@@ -194,7 +194,7 @@ votes == [a \in Acceptor |->
 (***************************************************************************)
 V == INSTANCE Voting 
 
-THEOREM Spec => V!Spec
+THEOREM Spec => V!Spec  \* 没有chosen，Voting里面的chosen，怎么赋值？ ==>chosen本来就是通过实时计算得到的，不是变量
 -----------------------------------------------------------------------------
 (***************************************************************************)
 (* Here is a first attempt at an inductive invariant used to prove this    *)
