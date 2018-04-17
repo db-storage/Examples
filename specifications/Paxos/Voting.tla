@@ -125,6 +125,7 @@ OneValuePerBallot ==
 THEOREM OneValuePerBallot => OneVote
 -----------------------------------------------------------------------------
 \* 这个实际上保证的，就是Consensus的最简单的模型：要么没有形成决议，要么只有一个决议。不过这里又称为Consistency了
+\* 为什么需要一个OneVote? 到底啥作用？
 THEOREM VotesSafeImpliesConsistency ==
           /\ TypeOK 
           /\ VotesSafe
